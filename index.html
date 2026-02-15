@@ -195,6 +195,15 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
 
+            // Persistency: Save view state on change
+            controls.addEventListener('change', () => {
+                const state = {
+                    position: camera.position,
+                    target: controls.target
+                };
+                localStorage.setItem('iss_view_state', JSON.stringify(state));
+            });
+
             // Lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
             scene.add(ambientLight);
@@ -228,11 +237,29 @@
                 
                 console.log('Model loaded', model);
                 
-                // Adjust camera based on size
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                camera.position.set(maxDim, maxDim/2, maxDim);
+                // Persistency: Restore View State
+                const savedView = localStorage.getItem('iss_view_state');
+                if (savedView) {
+                    const state = JSON.parse(savedView);
+                    camera.position.set(state.position.x, state.position.y, state.position.z);
+                    controls.target.set(state.target.x, state.target.y, state.target.z);
+                } else {
+                    // Default camera view if no state saved
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    camera.position.set(maxDim, maxDim/2, maxDim);
+                }
                 controls.update();
+
+                // Persistency: Restore Selection
+                const savedPartName = localStorage.getItem('iss_selected_part');
+                if (savedPartName) {
+                    const savedObj = scene.getObjectByName(savedPartName);
+                    if (savedObj) {
+                        outlinePass.selectedObjects = [savedObj];
+                        fetchWikiInfo(savedPartName);
+                    }
+                }
 
                 // Hide loading UI
                 loadingContainer.style.display = 'none';
@@ -373,9 +400,11 @@
                 
                 outlinePass.selectedObjects = [root];
                 fetchWikiInfo(root.name);
+                localStorage.setItem('iss_selected_part', root.name);
             } else {
                 outlinePass.selectedObjects = [];
                 document.getElementById('wiki-overlay').style.display = 'none';
+                localStorage.removeItem('iss_selected_part');
             }
         }
 
