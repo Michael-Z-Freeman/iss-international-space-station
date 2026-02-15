@@ -111,6 +111,17 @@
             margin-bottom: 15px;
             border-radius: 4px;
         }
+        .edit-name-btn {
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 11px;
+            color: #666;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .edit-name-btn:hover {
+            color: #007bff;
+        }
     </style>
 </head>
 <body>
@@ -158,6 +169,7 @@
         let scene, camera, renderer, controls, composer, outlinePass;
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
+        let customNames = JSON.parse(localStorage.getItem('iss_custom_names') || '{}');
 
         init();
         animate();
@@ -286,10 +298,14 @@
         async function fetchWikiInfo(objName) {
             const overlay = document.getElementById('wiki-overlay');
             const content = document.getElementById('wiki-content');
+            
+            // Use custom name if it exists
+            const displayName = customNames[objName] || objName;
+            
             overlay.style.display = 'block';
             content.innerHTML = '<h2>Loading...</h2><p>Fetching data from Wikipedia...</p>';
 
-            console.log('Original Object Name:', objName);
+            console.log('Fetching for:', displayName);
 
             // Map specific technical names to better wiki titles
             const nameMap = {
@@ -369,13 +385,43 @@
                         <p>${data.extract}</p>
                         <p style="font-size: 0.9em; color: #888;">(Summary from ${data.title})</p>
                         <p><a href="${displayUrl}" target="_blank" style="color: #007bff;">Read more on Wikipedia</a></p>
+                        <div class="edit-name-btn" id="rename-link">✎ Rename this model part in view</div>
                     `;
+                    
+                    document.getElementById('rename-link').onclick = () => {
+                        const newName = prompt(`Enter a more descriptive name for this part (Current: ${displayName}):`, displayName);
+                        if (newName && newName !== displayName) {
+                            customNames[objName] = newName;
+                            localStorage.setItem('iss_custom_names', JSON.stringify(customNames));
+                            fetchWikiInfo(objName);
+                        }
+                    };
                 } else {
-                    content.innerHTML = `<h2>${objName}</h2><p>No Wikipedia article found for "${wikiTitle}".</p>`;
+                    content.innerHTML = `<h2>${displayName}</h2><p>No Wikipedia article found for "${wikiTitle}".</p>
+                        <div class="edit-name-btn" id="rename-link">✎ Rename this model part in view</div>`;
+                    
+                    document.getElementById('rename-link').onclick = () => {
+                        const newName = prompt(`Enter a more descriptive name for this part:`, displayName);
+                        if (newName && newName !== displayName) {
+                            customNames[objName] = newName;
+                            localStorage.setItem('iss_custom_names', JSON.stringify(customNames));
+                            fetchWikiInfo(objName);
+                        }
+                    };
                 }
             } catch (error) {
                 console.error('Fetch error:', error);
-                content.innerHTML = `<h2>Error</h2><p>Could not load info for "${wikiTitle}".<br><small>${error.message}</small></p>`;
+                content.innerHTML = `<h2>Error</h2><p>Could not load info for "${wikiTitle}".<br><small>${error.message}</small></p>
+                    <div class="edit-name-btn" id="rename-link">✎ Rename this model part in view</div>`;
+                
+                document.getElementById('rename-link').onclick = () => {
+                    const newName = prompt(`Enter a more descriptive name for this part:`, displayName);
+                    if (newName && newName !== displayName) {
+                        customNames[objName] = newName;
+                        localStorage.setItem('iss_custom_names', JSON.stringify(customNames));
+                        fetchWikiInfo(objName);
+                    }
+                };
             }
         }
 
