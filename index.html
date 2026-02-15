@@ -73,6 +73,44 @@
         .control-key {
             color: #aaa;
         }
+        #wiki-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 300px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid #444;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+            z-index: 150;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        #wiki-overlay h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #007bff;
+        }
+        #wiki-overlay p {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #eee;
+        }
+        #wiki-overlay .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            color: #888;
+            font-size: 20px;
+        }
+        #wiki-overlay img {
+            width: 100%;
+            height: auto;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -90,6 +128,14 @@
         <div class="control-item"><span class="control-key">Zoom:</span> Scroll / Pinch</div>
         <div class="control-item"><span class="control-key">Pan:</span> Right Click / 2 Fingers</div>
         <div class="control-item"><span class="control-key">Arrows:</span> Rotate Camera</div>
+    </div>
+
+    <div id="wiki-overlay">
+        <span class="close-btn">&times;</span>
+        <div id="wiki-content">
+            <h2>Select a module</h2>
+            <p>Click on a part of the ISS to see information from Wikipedia.</p>
+        </div>
     </div>
 
     <script type="importmap">
@@ -203,9 +249,113 @@
 
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('click', onPointerClick);
+
+            document.querySelector('#wiki-overlay .close-btn').addEventListener('click', () => {
+                document.getElementById('wiki-overlay').style.display = 'none';
+                outlinePass.selectedObjects = [];
+            });
+        }
+
+        async function fetchWikiInfo(objName) {
+            const overlay = document.getElementById('wiki-overlay');
+            const content = document.getElementById('wiki-content');
+            overlay.style.display = 'block';
+            content.innerHTML = '<h2>Loading...</h2><p>Fetching data from Wikipedia...</p>';
+
+            console.log('Original Object Name:', objName);
+
+            // Map specific technical names to better wiki titles
+            const nameMap = {
+                'Zarya': 'Zarya',
+                'Zvezda': 'Zvezda (ISS module)',
+                'Unity': 'Unity (ISS module)',
+                'Destiny': 'Destiny (ISS module)',
+                'Harmony': 'Harmony (ISS module)',
+                'Tranquility': 'Tranquility (ISS module)',
+                'Columbus': 'Columbus (ISS module)',
+                'Kibo': 'Kibo (ISS module)',
+                'Cupola': 'Cupola (ISS module)',
+                'Quest': 'Quest Joint Airlock',
+                'Pirs': 'Pirs (ISS module)',
+                'Poisk': 'Poisk (ISS module)',
+                'Rassvet': 'Rassvet (ISS module)',
+                'Leonardo': 'Leonardo (ISS module)',
+                'Canadarm2': 'Canadarm2',
+                'DEXTRE': 'Dextre',
+                'AMS2': 'Alpha Magnetic Spectrometer',
+                'ESP': 'External Stowage Platform',
+                'ELC': 'ExPRESS Logistics Carrier',
+                'RapidScat': 'ISS-RapidScat',
+                'ECOStress': 'ECOSTRESS',
+                'OCO3': 'Orbiting Carbon Observatory 3',
+                'CATS': 'Cloud-Aerosol Transport System'
+            };
+
+            let wikiTitle = null;
+            let trussSection = null;
+
+            // Check if it's a truss segment first
+            if (objName.includes('Truss')) {
+                wikiTitle = 'Integrated Truss Structure';
+                if (objName.includes('S0')) trussSection = "S0 truss";
+                else if (objName.includes('S1') || objName.includes('P1')) trussSection = "S1 and P1 trusses";
+                else if (objName.includes('P3') || objName.includes('S3')) trussSection = "P3 and S3 trusses";
+                else if (objName.includes('P4') || objName.includes('S4')) trussSection = "P4 and S4 trusses";
+                else if (objName.includes('P5') || objName.includes('S5')) trussSection = "P5 and S5 trusses";
+                else if (objName.includes('P6') || objName.includes('S6')) trussSection = "P6 and S6 trusses";
+                else if (objName.includes('Z1')) trussSection = "Z1 truss";
+            } else {
+                for (let key in nameMap) {
+                    if (objName.includes(key)) {
+                        wikiTitle = nameMap[key];
+                        break;
+                    }
+                }
+            }
+
+            // Final fallback: clean up the string if no mapping found
+            if (!wikiTitle) {
+                wikiTitle = objName.replace(/^_[0-9]_+/, '').replace(/_+/g, ' ').trim().split(' ')[0];
+            }
+
+            console.log('Target Wiki Title:', wikiTitle, 'Truss Section:', trussSection);
+
+            try {
+                // If it's a truss segment, we'll try to get the summary of the main page 
+                // but prepend the section name to make it clear what we're looking at.
+                const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`;
+                console.log('Fetching URL:', url);
+                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+
+                if (data.title && data.extract) {
+                    let displayTitle = trussSection ? `${trussSection.toUpperCase()}` : data.title;
+                    let displayUrl = trussSection 
+                        ? `https://en.wikipedia.org/wiki/Integrated_Truss_Structure#${encodeURIComponent(trussSection.replace(/ /g, '_'))}`
+                        : data.content_urls.desktop.page;
+
+                    content.innerHTML = `
+                        <h2>${displayTitle}</h2>
+                        ${data.thumbnail ? `<img src="${data.thumbnail.source}" />` : ''}
+                        <p>${data.extract}</p>
+                        <p style="font-size: 0.9em; color: #888;">(Summary from ${data.title})</p>
+                        <p><a href="${displayUrl}" target="_blank" style="color: #007bff;">Read more on Wikipedia</a></p>
+                    `;
+                } else {
+                    content.innerHTML = `<h2>${objName}</h2><p>No Wikipedia article found for "${wikiTitle}".</p>`;
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                content.innerHTML = `<h2>Error</h2><p>Could not load info for "${wikiTitle}".<br><small>${error.message}</small></p>`;
+            }
         }
 
         function onPointerClick(event) {
+            // Don't trigger if clicking the overlay itself
+            if (event.target.closest('#wiki-overlay') || event.target.closest('#controls-info')) return;
+
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -214,10 +364,18 @@
 
             if (intersects.length > 0) {
                 const selectedObject = intersects[0].object;
-                outlinePass.selectedObjects = [selectedObject];
-                console.log('Clicked on:', selectedObject.name);
+                
+                // Find the top-level parent that has a descriptive name
+                let root = selectedObject;
+                while (root.parent && root.parent.type !== 'Scene' && !root.name.startsWith('_')) {
+                    root = root.parent;
+                }
+                
+                outlinePass.selectedObjects = [root];
+                fetchWikiInfo(root.name);
             } else {
                 outlinePass.selectedObjects = [];
+                document.getElementById('wiki-overlay').style.display = 'none';
             }
         }
 
