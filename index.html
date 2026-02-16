@@ -160,6 +160,8 @@
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+        import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -167,12 +169,17 @@
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
         let scene, camera, renderer, controls, composer, outlinePass;
+        let needsRender = true;
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         let customNames = JSON.parse(localStorage.getItem('iss_custom_names') || '{}');
 
         init();
         animate();
+
+        function requestRender() {
+            needsRender = true;
+        }
 
         function init() {
             scene = new THREE.Scene();
@@ -183,7 +190,7 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 1;
             document.body.appendChild(renderer.domElement);
@@ -207,14 +214,17 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
 
-            // Persistency: Save view state on change
-            controls.addEventListener('change', () => {
+            // Persistency: Save view state on end of interaction
+            controls.addEventListener('end', () => {
                 const state = {
                     position: camera.position,
                     target: controls.target
                 };
                 localStorage.setItem('iss_view_state', JSON.stringify(state));
             });
+
+            // On-demand rendering: render only when controls change
+            controls.addEventListener('change', requestRender);
 
             // Lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
@@ -233,13 +243,36 @@
             scene.add(fillLight);
 
             // Loader
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+
+            const ktx2Loader = new KTX2Loader();
+            ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/');
+            ktx2Loader.detectSupport(renderer);
+
             const loader = new GLTFLoader();
+            loader.setDRACOLoader(dracoLoader);
+            loader.setKTX2Loader(ktx2Loader);
+
             const progressBar = document.getElementById('progress-bar');
             const loadingContainer = document.getElementById('loading-container');
 
-            loader.load('iss_model.glb', function (gltf) {
+            loader.load('International Space Station (ISS)_ktx2.glb', function (gltf) {
                 const model = gltf.scene;
                 
+                // Optimizations: Force FrontSide rendering for backface culling
+                /*
+                model.traverse((node) => {
+                    if (node.isMesh) {
+                        if (Array.isArray(node.material)) {
+                            node.material.forEach(mat => mat.side = THREE.FrontSide);
+                        } else if (node.material) {
+                            node.material.side = THREE.FrontSide;
+                        }
+                    }
+                });
+                */
+
                 // Center model
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
@@ -262,6 +295,7 @@
                     camera.position.set(maxDim, maxDim/2, maxDim);
                 }
                 controls.update();
+                requestRender();
 
                 // Persistency: Restore Selection
                 const savedPartName = localStorage.getItem('iss_selected_part');
@@ -270,6 +304,7 @@
                     if (savedObj) {
                         outlinePass.selectedObjects = [savedObj];
                         fetchWikiInfo(savedPartName);
+                        requestRender();
                     }
                 }
 
@@ -292,6 +327,7 @@
             document.querySelector('#wiki-overlay .close-btn').addEventListener('click', () => {
                 document.getElementById('wiki-overlay').style.display = 'none';
                 outlinePass.selectedObjects = [];
+                requestRender();
             });
         }
 
@@ -438,19 +474,38 @@
             if (intersects.length > 0) {
                 const selectedObject = intersects[0].object;
                 
-                // Find the top-level parent that has a descriptive name
+                // Find the best node to select:
+                // 1. Walk up from the mesh.
+                // 2. Stop at the first node that DOES NOT contain "details" in its name.
+                // 3. If we hit "SSREF_IGOAL", stop at the node just below it (to pick the major module).
+                
+                let current = selectedObject;
                 let root = selectedObject;
-                while (root.parent && root.parent.type !== 'Scene' && !root.name.startsWith('_')) {
-                    root = root.parent;
+                
+                while (current && current.parent && current.parent.type !== 'Scene') {
+                    if (current.parent.name === 'SSREF_IGOAL') {
+                        root = current;
+                        break;
+                    }
+                    
+                    if (!current.name.toLowerCase().includes('details')) {
+                        root = current;
+                        break;
+                    }
+                    
+                    current = current.parent;
+                    root = current; // Fallback to parent if we keep looping
                 }
                 
                 outlinePass.selectedObjects = [root];
                 fetchWikiInfo(root.name);
                 localStorage.setItem('iss_selected_part', root.name);
+                requestRender();
             } else {
                 outlinePass.selectedObjects = [];
                 document.getElementById('wiki-overlay').style.display = 'none';
                 localStorage.removeItem('iss_selected_part');
+                requestRender();
             }
         }
 
@@ -459,12 +514,19 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
             composer.setSize(window.innerWidth, window.innerHeight);
+            requestRender();
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            controls.update();
-            composer.render();
+            
+            // OrbitControls with damping returns true if damping is still active
+            const controlsUpdating = controls.update();
+            
+            if (controlsUpdating || needsRender) {
+                composer.render();
+                needsRender = false;
+            }
         }
     </script>
 </body>
