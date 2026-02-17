@@ -1,0 +1,4 @@
+Fixing Object: Zvezda Service Module
+Updating Material: ELC_Base
+Set Blend Mode to OPAQUE and disabled Backface Culling.
+Successfully recalculated normals (Outward).

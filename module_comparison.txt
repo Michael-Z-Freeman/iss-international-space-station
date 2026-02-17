@@ -1,0 +1,40 @@
+--- Comparison for: US Laboratory (Destiny) ---
+Type: MESH
+  Material: ELC_Base
+    Blend Mode: BLEND
+    Backface Culling: True
+    Alpha Val: 1.0
+    Alpha Linked: True
+      From Node: TEX_IMAGE
+    Show Backface: N/A
+  Material: MLI.Generic
+    Blend Mode: HASHED
+    Backface Culling: False
+    Alpha Val: 1.0
+    Alpha Linked: False
+    Show Backface: N/A
+  Material: USLab
+    Blend Mode: HASHED
+    Backface Culling: False
+    Alpha Val: 1.0
+    Alpha Linked: False
+    Show Backface: N/A
+  Normals Sample: 35/50 point inward.
+
+--- Comparison for: Zvezda Service Module ---
+Type: MESH
+  Material: ELC_Base
+    Blend Mode: BLEND
+    Backface Culling: True
+    Alpha Val: 1.0
+    Alpha Linked: True
+      From Node: TEX_IMAGE
+    Show Backface: N/A
+  Material: Zvezda.SM
+    Blend Mode: BLEND
+    Backface Culling: False
+    Alpha Val: 1.0
+    Alpha Linked: True
+      From Node: TEX_IMAGE
+    Show Backface: N/A
+  Normals Sample: 16/50 point inward.

@@ -1,0 +1,8 @@
+Object: Zvezda Service Module
+Materials found: 2
+--- Material: ELC_Base ---
+  Blend Mode: HASHED
+  Backface Culling: False
+--- Material: Zvezda.SM ---
+  Blend Mode: BLEND
+  Backface Culling: False

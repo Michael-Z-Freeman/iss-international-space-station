@@ -4,11 +4,13 @@
 Interactive 3D visualization of the International Space Station (ISS) using Three.js, featuring granular part selection and Wikipedia integration.
 
 ## Known Model Issues
-*   **Zvezda_SM Normals:** The `Zvezda_SM` module appears to have flipped normals or incorrect winding order, making parts of it appear see-through (inverted).
-    *   **Potential Fix:** This might be fixable using `gltf-transform` with the `backface-culling` or `normals` commands, or by manually flipping normals in Blender.
+*   **Zvezda_SM Rendering (FIXED):** The module appeared see-through due to incorrect material settings.
+    *   **Fix:** Changed Material Blend Mode from `Blended` to `Dithered` (Hashed) and ensured Backface Culling was disabled. Also recalculated normals to point outward.
+*   **Model Duplication (FIXED):** The Blender scene contained two major `SSREF_IGOAL` hierarchies.
+    *   **Fix:** Re-imported original NASA model and deleted all duplicated hierarchies.
 
-## Memory & Performance Optimizations (Pending)
-The transition to the high-detail `International Space Station (ISS).glb` (91MB Draco compressed) resulted in high browser memory usage (~3.1 GB). The following optimization strategies have been identified:
+## Memory & Performance Optimizations (In Progress)
+The transition to the high-detail `International Space Station (ISS).glb` (91MB Draco compressed) resulted in high browser memory usage (~3.1 GB). Implementing KTX2 texture compression successfully reduced this to ~2.1 GB. The following optimization strategies have been identified:
 
 ### 1. GPU Texture Compression (KTX2 / Basis Universal) - COMPLETED
 *   **Problem:** Standard JPEG/PNG/WebP textures decompress into raw bitmaps in VRAM, consuming massive amounts of VRAM.

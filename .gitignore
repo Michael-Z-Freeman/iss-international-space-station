@@ -1,0 +1,8 @@
+# Node.js
+node_modules/
+
+# Blender backup files
+*.blend[0-9]*
+
+# macOS system files
+.DS_Store
