@@ -1,7 +1,0 @@
---- Inspection Result for: Zvezda Service Module ---
-Type: MESH
-Normal Direction: 45/100 faces point inward (local origin).
-Material: ELC_Base
-  Blend Mode: BLEND
-  Backface Culling: True
-  Principled Alpha: 1.0
