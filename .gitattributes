@@ -12,3 +12,5 @@
 *.jpg filter=lfs diff=lfs merge=lfs -text
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
+International[[:space:]]Space[[:space:]]Station[[:space:]](ISS).blend filter=lfs diff=lfs merge=lfs -text
+International[[:space:]]Space[[:space:]]Station[[:space:]](ISS)_ktx2.glb filter=lfs diff=lfs merge=lfs -text
