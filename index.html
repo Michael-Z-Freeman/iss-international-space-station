@@ -168,7 +168,7 @@
         import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-        let scene, camera, renderer, controls, composer, outlinePass;
+        let scene, camera, renderer, controls, composer, outlinePass, issModel;
         let needsRender = true;
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -257,8 +257,9 @@
             const progressBar = document.getElementById('progress-bar');
             const loadingContainer = document.getElementById('loading-container');
 
-            loader.load('International Space Station (ISS).glb', function (gltf) {
+            loader.load('International Space Station (ISS).draco.glb', function (gltf) {
                 const model = gltf.scene;
+                issModel = model;
                 
                 // Optimizations: Force FrontSide rendering for backface culling
                 /*
@@ -300,10 +301,11 @@
                 // Persistency: Restore Selection
                 const savedPartName = localStorage.getItem('iss_selected_part');
                 if (savedPartName) {
-                    const savedObj = scene.getObjectByName(savedPartName);
+                    const savedObj = model.getObjectByName(savedPartName);
                     if (savedObj) {
-                        outlinePass.selectedObjects = [savedObj];
-                        fetchWikiInfo(savedPartName);
+                        const outlineTarget = findFirstMesh(savedObj) || savedObj;
+                        outlinePass.selectedObjects = [outlineTarget];
+                        fetchWikiInfo(savedObj.name || savedPartName);
                         requestRender();
                     }
                 }
@@ -329,6 +331,37 @@
                 outlinePass.selectedObjects = [];
                 requestRender();
             });
+        }
+
+        function isGoodInfoName(name) {
+            if (!name) return false;
+            const lower = name.toLowerCase();
+            if (lower.includes('details')) return false;
+            if (lower.includes('rgba')) return false;
+            if (lower.includes('misc')) return false;
+            if (lower.includes('collection')) return false;
+            if (lower.includes('ik reference goal')) return false;
+            return true;
+        }
+
+        function findInfoNode(node) {
+            let current = node;
+            while (current && current.parent && current.parent.type !== 'Scene') {
+                if (isGoodInfoName(current.name)) return current;
+                current = current.parent;
+            }
+            return node;
+        }
+
+        function findFirstMesh(node) {
+            if (!node) return null;
+            if (node.isMesh) return node;
+
+            let found = null;
+            node.traverse((child) => {
+                if (!found && child.isMesh) found = child;
+            });
+            return found;
         }
 
         async function fetchWikiInfo(objName) {
@@ -367,7 +400,8 @@
                 'RapidScat': 'ISS-RapidScat',
                 'ECOStress': 'ECOSTRESS',
                 'OCO3': 'Orbiting Carbon Observatory 3',
-                'CATS': 'Cloud-Aerosol Transport System'
+                'CATS': 'Cloud-Aerosol Transport System',
+                'ASIM': 'Atmosphere-Space Interactions Monitor'
             };
 
             let wikiTitle = null;
@@ -394,7 +428,9 @@
 
             // Final fallback: clean up the string if no mapping found
             if (!wikiTitle) {
-                wikiTitle = objName.replace(/^_[0-9]_+/, '').replace(/_+/g, ' ').trim().split(' ')[0];
+                const cleaned = objName.replace(/^_[0-9]_+/, '').replace(/_+/g, ' ').trim();
+                const parenMatch = cleaned.match(/\(([^)]+)\)/);
+                wikiTitle = parenMatch ? parenMatch[1].trim() : cleaned;
             }
 
             console.log('Target Wiki Title:', wikiTitle, 'Truss Section:', trussSection);
@@ -469,7 +505,8 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(scene.children, true);
+            if (!issModel) return;
+            const intersects = raycaster.intersectObject(issModel, true);
 
             if (intersects.length > 0) {
                 const selectedObject = intersects[0].object;
@@ -479,27 +516,12 @@
                 // 2. Stop at the first node that DOES NOT contain "details" in its name.
                 // 3. If we hit "SSREF_IGOAL", stop at the node just below it (to pick the major module).
                 
-                let current = selectedObject;
-                let root = selectedObject;
+                const outlineTarget = selectedObject.isMesh ? selectedObject : (findFirstMesh(selectedObject) || selectedObject);
+                const infoNode = findInfoNode(outlineTarget);
                 
-                while (current && current.parent && current.parent.type !== 'Scene') {
-                    if (current.parent.name === 'SSREF_IGOAL') {
-                        root = current;
-                        break;
-                    }
-                    
-                    if (!current.name.toLowerCase().includes('details')) {
-                        root = current;
-                        break;
-                    }
-                    
-                    current = current.parent;
-                    root = current; // Fallback to parent if we keep looping
-                }
-                
-                outlinePass.selectedObjects = [root];
-                fetchWikiInfo(root.name);
-                localStorage.setItem('iss_selected_part', root.name);
+                outlinePass.selectedObjects = [outlineTarget];
+                fetchWikiInfo(infoNode.name || selectedObject.name);
+                localStorage.setItem('iss_selected_part', infoNode.name || selectedObject.name);
                 requestRender();
             } else {
                 outlinePass.selectedObjects = [];
