@@ -169,10 +169,13 @@
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
         let scene, camera, renderer, controls, composer, outlinePass, issModel;
+        const partByObject = new WeakMap();
+        const selectableObjects = new WeakSet();
         let needsRender = true;
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         let customNames = JSON.parse(localStorage.getItem('iss_custom_names') || '{}');
+        const debugSelection = new URLSearchParams(window.location.search).has('debugSelection');
 
         init();
         animate();
@@ -280,6 +283,7 @@
                 model.position.sub(center);
                 
                 scene.add(model);
+                buildPartIndex(model);
                 
                 console.log('Model loaded', model);
                 
@@ -333,21 +337,54 @@
             });
         }
 
+        const ignoreNamePatterns = [
+            /details/i,
+            /rgba/i,
+            /misc/i,
+            /collection/i,
+            /ik reference goal/i,
+            /_details_/i,
+            /[_ -]\\d+$/i
+        ];
+
+        function getObjectName(obj) {
+            if (!obj) return '';
+            return obj.name || obj.userData?.name || obj.geometry?.name || obj.material?.name || '';
+        }
+
         function isGoodInfoName(name) {
             if (!name) return false;
-            const lower = name.toLowerCase();
-            if (lower.includes('details')) return false;
-            if (lower.includes('rgba')) return false;
-            if (lower.includes('misc')) return false;
-            if (lower.includes('collection')) return false;
-            if (lower.includes('ik reference goal')) return false;
+            if (ignoreNamePatterns.some((pattern) => pattern.test(name))) return false;
             return true;
         }
 
+        function isSelectableObject(obj) {
+            if (!obj || !obj.isMesh) return false;
+            const name = getObjectName(obj);
+            return isGoodInfoName(name);
+        }
+
+        function buildPartIndex(root) {
+            root.traverse((obj) => {
+                if (isSelectableObject(obj)) selectableObjects.add(obj);
+            });
+
+            root.traverse((obj) => {
+                let current = obj;
+                while (current && current !== root && !selectableObjects.has(current)) {
+                    current = current.parent;
+                }
+                const resolved = (current && selectableObjects.has(current)) ? current : obj;
+                partByObject.set(obj, resolved);
+            });
+        }
+
         function findInfoNode(node) {
+            const resolved = partByObject.get(node);
+            if (resolved) return resolved;
             let current = node;
             while (current && current.parent && current.parent.type !== 'Scene') {
-                if (isGoodInfoName(current.name)) return current;
+                if (isGoodInfoName(getObjectName(current))) return current;
                 current = current.parent;
             }
             return node;
@@ -362,6 +399,21 @@
                 if (!found && child.isMesh) found = child;
             });
             return found;
+        }
+
+        function getObjectPath(node) {
+            const names = [];
+            let current = node;
+            while (current) {
+                const name = getObjectName(current) || '(unnamed)';
+                names.push(name);
+                if (current.parent && current.parent.type === 'Scene') {
+                    names.push('Scene');
+                    break;
+                }
+                current = current.parent;
+            }
+            return names.reverse().join(' > ');
         }
 
         async function fetchWikiInfo(objName) {
@@ -517,11 +569,19 @@
                 // 3. If we hit "SSREF_IGOAL", stop at the node just below it (to pick the major module).
                 
                 const outlineTarget = selectedObject.isMesh ? selectedObject : (findFirstMesh(selectedObject) || selectedObject);
-                const infoNode = findInfoNode(outlineTarget);
+                const infoNode = findInfoNode(selectedObject) || findInfoNode(outlineTarget);
                 
                 outlinePass.selectedObjects = [outlineTarget];
-                fetchWikiInfo(infoNode.name || selectedObject.name);
-                localStorage.setItem('iss_selected_part', infoNode.name || selectedObject.name);
+                const infoName = infoNode.name || selectedObject.name;
+                if (debugSelection) {
+                    console.log('[Selection]', {
+                        hit: selectedObject.name,
+                        resolved: infoName,
+                        path: getObjectPath(selectedObject)
+                    });
+                }
+                fetchWikiInfo(infoName);
+                localStorage.setItem('iss_selected_part', infoName);
                 requestRender();
             } else {
                 outlinePass.selectedObjects = [];
